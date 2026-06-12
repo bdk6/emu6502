@@ -1,0 +1,17 @@
+//////////////////////////////////////////////////////////////////////////////
+/// @file disasm.h
+/// @brief Header for disasm.c, 6502 disassembler used with emu6502
+/////////////////////////////////////////////////////////////////////////////
+#ifndef _DISASM_H_
+#define _DISASM_H_
+#include <stdio.h>
+#include <stdint.h>
+
+int disasm(uint8_t* mem, uint16_t pc);
+
+
+
+
+
+
+#endif // _DISASM_H_

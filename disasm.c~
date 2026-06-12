@@ -1,0 +1,454 @@
+// emu6502
+// 6502 disassembler
+// copyright 2025 William R Cooke
+// 20250922
+
+#include <stdio.h>
+#include <stdint.h>
+
+typedef enum
+  {
+    FM_IMPL,    // No operands
+    FM_A,       // A
+    FM_IMM,     // #xx One byte immediate
+    FM_ZP,      // xx One byte zero page address
+    FM_ZPX,     // xx,X  One byte zero page indexed X
+    FM_ZPY,     // xx,Y  One byte zero page indexed Y
+    FM_REL,     // xx    One byte jump displacement
+    FM_ABS,     // xxxx  Two byte absolute address
+    FM_ABSX,    // xxxx,X Two byte address, indexed X
+    FM_ABSY,    // xxxx,Y Two byte address, indexed Y
+    FM_IXIN,    // (xx,X) One byte zero page indexed indirect
+    FM_INIX,    // (xx),Y One byte zero page indirect indexed
+    FM_IND,     // (xxxx) Two byte indirect
+    FM_ILL      // Illegal op, use opcode only
+  }  form_t;
+
+typedef struct
+{
+  char name[4];   // Name plus null
+  form_t form;    // form of the instruction
+} instruction_t;
+
+int disasm(uint8_t* mem, uint16_t pc);
+
+instruction_t instructions[256] =
+  {
+    { "BRK", FM_IMPL},     // 00 BRK
+    { "ORA", FM_IXIN},     // 01 ORA (xx,X)
+    { "ILL", FM_ILL},      // 02 ILL
+    { "ILL", FM_ILL},      // 03 ILL
+    { "ILL", FM_ILL},      // 04 ILL
+    { "ORA", FM_ZP},       // 05 ORA xx
+    { "ASL", FM_ZP},       // 06 ASL
+    { "ILL", FM_ILL},      // 07 ILL
+    { "PHP", FM_IMPL},     // 08 PHP
+    { "ORA", FM_IMM},      // 09 ORA #xx
+    { "ASL", FM_A},        // 0a ASL A
+    { "ILL", FM_ILL},      // 0b ILL
+    { "ILL", FM_ILL},      // 0c ILL
+    { "ORA", FM_ABS},      // 0d ORA xxxx
+    { "ASL", FM_ABS},      // 0e ASL xxxx
+    { "ILL", FM_ILL},      // 0f ILL
+    { "BPL", FM_REL},      // 10 BPL
+    { "ORA", FM_INIX},     // 11 ORA (xx),Y
+    { "ILL", FM_ILL},      // 12 ILL
+    { "ILL", FM_ILL},      // 13 ILL
+    { "ILL", FM_ILL},      // 14 ILL
+    { "ORA", FM_ZPX},      // 15 ORA xx,X
+    { "ASL", FM_ZPX},      // 16 ASL xx,X
+    { "ILL", FM_ILL},      // 17 ILL
+    { "CLC", FM_IMPL},     // 18 CLC
+    { "ORA", FM_ABSY},     // 19 ORA xxxx,Y
+    { "ILL", FM_ILL},      // 1a ILL
+    { "ILL", FM_ILL},      // 1b ILL
+    { "ILL", FM_ILL},      // 1c ILL
+    { "ORA", FM_ABSX},     // 1d ORA xxxx,X
+    { "ASL", FM_ABSX},     // 1e ASL xxxx,X
+    { "ILL", FM_ILL},      // 1f ILL
+    { "JSR", FM_ABS},      // 20 jsr xxxx
+    { "AND", FM_IXIN},     // 21 AND (xx,X)
+    { "ILL", FM_ILL},      // 22 ILL
+    { "ILL", FM_ILL},      // 23 ILL
+    { "BIT", FM_ZP},       // 24 BIT xx
+    { "AND", FM_ZP},       // 25 AND xx
+    { "ROL", FM_ZP},       // 26 ROL xx
+    { "ILL", FM_ILL},      // 27 ILL
+    { "PLP", FM_IMPL},     // 28 PLP
+    { "AND", FM_IMM},      // 29 AND #xx
+    { "ROL", FM_ABS},      // 2a ROL xxxx
+    { "ILL", FM_ILL},      // 2b ILL
+    { "BIT", FM_ABS},      // 2c BIT xxxx
+    { "AND", FM_ABS},      // 2d AND xxxx
+    { "ROL", FM_ABS},      // 2e ROL xxxx
+    { "ILL", FM_ILL},      // 2f ILL
+    { "BMI", FM_REL},      // 30 BMI xx
+    { "AND", FM_IXIN},     // 31 AND (xx),Y
+    { "ILL", FM_ILL},      // 32 ILL
+    { "ILL", FM_ILL},      // 33 ILL
+    { "ILL", FM_ILL},      // 34 ILL
+    { "AND", FM_ZPX},      // 35 AND xx,X
+    { "ROL", FM_ZPX},      // 36 ROL xx,x
+    { "ILL", FM_ILL},      // 37 ILL
+    { "SEC", FM_IMPL},     // 38 SEC
+    { "AND", FM_ABSY},     // 39 AND xxxx,Y
+    { "ILL", FM_ILL},      // 3a ILL
+    { "ILL", FM_ILL},      // 3b ILL
+    { "ILL", FM_ILL},      // 3c ILL
+    { "AND", FM_ABSX},     // 3d AND xxxx,X
+    { "ROL", FM_ZPX},      // 3e ROL xxxx,X
+    { "ILL", FM_ILL},      // 3f ILL
+    { "RTI", FM_IMPL},     // 40 RTI
+    { "EOR", FM_IXIN},     // 41 EOR (xx,X)
+    { "ILL", FM_ILL},      // 42 ILL
+    { "ILL", FM_ILL},      // 43 ILL
+    { "ILL", FM_ILL},      // 44 ILL
+    { "EOR", FM_ZP},       // 45 EOR xx
+    { "LSR", FM_ZP},       // 46 LSR xx
+    { "ILL", FM_ILL},      // 47 ILL
+    { "PHA", FM_IMPL},     // 48 PHA
+    { "EOR", FM_IMM},      // 49 EOR #xx
+    { "LSR", FM_A},        // 4a LSR A
+    { "ILL", FM_ILL},      // 4b ILL
+    { "JMP", FM_ABS},      // 4c JMP xxxx
+    { "EOR", FM_ABS},      // 4d EOR xxxx
+    { "LSR", FM_ABS},      // 4e LSR xxxx
+    { "ILL", FM_ILL},      // 4f ILL
+    { "BVC", FM_REL},      // 50 BVC xx
+    { "EOR", FM_INIX},     // 51 EOR (xx),Y
+    { "ILL", FM_ILL},      // 52 ILL
+    { "ILL", FM_ILL},      // 53 ILL
+    { "ILL", FM_ILL},      // 54 ILL
+    { "EOR", FM_ZPX},      // 55 EOR xx,X
+    { "LSR", FM_ZPX},      // 56 LSR xx,X
+    { "ILL", FM_ILL},      // 57 ILL
+    { "CLI", FM_IMPL},     // 58 CLI
+    { "EOR", FM_ABSY},     // 59 EOR xxxx,Y
+    { "ILL", FM_ILL},      // 5a ILL
+    { "ILL", FM_ILL},      // 5b ILL
+    { "ILL", FM_ILL},      // 5c ILL
+    { "EOR", FM_ABSX},     // 5d EOR xxxx,X
+    { "LSR", FM_ABSX},     // 5e LSR xxxx,X
+    { "ILL", FM_ILL},      // 5f ILL
+    { "RTS", FM_IMPL},     // 60 RTS
+    { "ADC", FM_IXIN},     // 61 ADC (xx,X)
+    { "ILL", FM_ILL},      // 62 ILL
+    { "ILL", FM_ILL},      // 63 ILL
+    { "ILL", FM_ILL},      // 64 ILL
+    { "ADC", FM_ZP},       // 65 ADC xx
+    { "ROR", FM_ZP},       // 66 ROR xx
+    { "ILL", FM_ILL},      // 67 ILL
+    { "PLA", FM_IMPL},     // 68 PLA
+    { "ADC", FM_IMM},      // 69 ADC #xx
+    { "ROR", FM_A},        // 6a ROR A
+    { "ILL", FM_ILL},      // 6b ILL
+    { "JMP", FM_IND},      // 6c JMP (xxxx)
+    { "ADC", FM_ABS},      // 6d ADC xxxx
+    { "ROR", FM_ABS},      // 6e ROR xxxx
+    { "ILL", FM_ILL},      // 6f ILL
+    { "BVS", FM_REL},      // 70 BVS xx
+    { "ADC", FM_INIX},     // 71 ADC (xx),Y
+    { "ILL", FM_ILL},      // 72 ILL
+    { "ILL", FM_ILL},      // 73 ILL
+    { "ILL", FM_ILL},      // 74 ILL
+    { "ADC", FM_ZPX},      // 75 ADC xx,X
+    { "ROR", FM_ZPX},      // 76 ROR xx,X
+    { "ILL", FM_ILL},      // 77 ILL
+    { "SEI", FM_IMPL},     // 78 SEI
+    { "ADC", FM_ABSY},     // 79 ADC xxxx,Y
+    { "ILL", FM_ILL},      // 7a ILL
+    { "ILL", FM_ILL},      // 7b ILL
+    { "ILL", FM_ILL},      // 7c ILL
+    { "ADC", FM_ABSX},     // 7d ADC xxxx,X
+    { "ROR", FM_ABSX},     // 7e ROR xxxx,X
+    { "ILL", FM_ILL},      // 7f ILL
+    { "ILL", FM_ILL},      // 80 ILL
+    { "STA", FM_INIX},     // 81 STA (xx,X)
+    { "ILL", FM_ILL},      // 82 ILL
+    { "ILL", FM_ILL},      // 83 ILL
+    { "STY", FM_ZP},       // 84 STY xx
+    { "STA", FM_ZP},       // 85 STA xx
+    { "STX", FM_ZP},       // 86 STX xx
+    { "ILL", FM_ILL},      // 87 ILL
+    { "DEY", FM_IMPL},     // 88 DEY
+    { "ILL", FM_ILL},      // 89 ILL
+    { "TXA", FM_IMPL},     // 8a TXA
+    { "ILL", FM_ILL},      // 8b ILL
+    { "STY", FM_ABS},      // 8c STY xxxx
+    { "STA", FM_ABS},      // 8d STA xxxx
+    { "STX", FM_ABS},      // 8e STX xxxx
+    { "ILL", FM_ILL},      // 8f ILL
+    { "BCC", FM_REL},      // 90 BCC xx
+    { "STA", FM_INIX},     // 91 STA (xx),Y
+    { "ILL", FM_ILL},      // 92 ILL
+    { "ILL", FM_ILL},      // 93 ILL
+    { "STY", FM_ZPX},      // 94 STY xx,X
+    { "STA", FM_ZPX},      // 95 STA xx,X
+    { "STX", FM_ZPY},      // 96 STX xx,Y
+    { "ILL", FM_ILL},      // 97 ILL
+    { "TYA", FM_IMPL},     // 98 TYA
+    { "STA", FM_ABSY},     // 99 STA xxxx,Y
+    { "TXS", FM_IMPL},     // 9a TXS
+    { "ILL", FM_ILL},      // 9b ILL
+    { "ILL", FM_ILL},      // 9c ILL
+    { "STA", FM_ABSX},     // 9d STA xxxx,X
+    { "ILL", FM_ILL},      // 9e ILL
+    { "ILL", FM_ILL},      // 9f ILL
+    { "LDY", FM_IMM},      // a0 LDY #xx
+    { "LDA", FM_INIX},     // a1 LDA (xx),Y
+    { "LDX", FM_IMM},      // a2 LDX #xx
+    { "ILL", FM_ILL},      // a3 ILL
+    { "LDY", FM_ZP},       // a4 LDY xx
+    { "LDA", FM_ZP},       // a5 LDA xx
+    { "LDX", FM_ZP},       // a6 LDX xx
+    { "ILL", FM_ILL},      // a7 ILL
+    { "TAY", FM_IMPL},     // a8 TAY
+    { "LDA", FM_IMM},      // a9 LDA #xx
+    { "TAX", FM_IMPL},     // aa TAX
+    { "ILL", FM_ILL},      // ab ILL
+    { "LDY", FM_ABS},      // ac LDY xxxx
+    { "LDA", FM_ABS},      // ad LDA xxxx
+    { "LDX", FM_ABS},      // ae LDX xxxx
+    { "ILL", FM_ILL},      // af ILL
+    { "BCS", FM_REL},      // b0 BCS
+    { "LDA", FM_INIX},     // b1 LDA (xx),Y
+    { "ILL", FM_ILL},      // b2 ILL
+    { "ILL", FM_ILL},      // b3 ILL
+    { "LDY", FM_ZPX},      // b4 LDY xx,X
+    { "LDA", FM_ZPX},      // b5 LDA xx,X
+    { "LDX", FM_ZPY},      // b6 LDX xx,Y
+    { "ILL", FM_ILL},      // b7 ILL
+    { "CLV", FM_IMPL},     // b8 CLV
+    { "LDA", FM_ABSY},     // b9 LDA xxxx,Y
+    { "TSX", FM_IMPL},     // ba TSX
+    { "ILL", FM_ILL},      // bb ILL
+    { "LDY", FM_ABSX},     // bc LDY xxxx,X
+    { "LDA", FM_ABSX},     // bd LDA xxxx,X
+    { "LDX", FM_ABSY},     // be LDX xxxx,Y
+    { "ILL", FM_ILL},      // bf ILL
+    { "CPY", FM_IMM},      // c0 CPY #xx
+    { "CMP", FM_IXIN},     // c1 CMP (xx,X)
+    { "ILL", FM_ILL},      // c2 ILL
+    { "ILL", FM_ILL},      // c3 ILL
+    { "CPY", FM_ZP},       // c4 CPY xx
+    { "CMP", FM_ZP},       // c5 CMP xx
+    { "DEC", FM_ZP},       // c6 DEC xx
+    { "ILL", FM_ILL},      // c7 ILL
+    { "INY", FM_IMPL},     // c8 INY
+    { "CMP", FM_IMM},      // c9 CMP #xx
+    { "DEX", FM_IMPL},     // ca DEX
+    { "ILL", FM_ILL},      // cb ILL
+    { "CPY", FM_ABS},      // cc CPY xxxx
+    { "CMP", FM_ABS},      // cd CMP xxxx
+    { "DEC", FM_ABS},      // ce DEC xxxx
+    { "ILL", FM_ILL},      // cf ILL
+    { "BNE", FM_REL},      // d0 BNE xx
+    { "CMP", FM_IXIN},     // d1 CMP (xx),Y
+    { "ILL", FM_ILL},      // d2 ILL
+    { "ILL", FM_ILL},      // d3 ILL
+    { "ILL", FM_ILL},      // d4 ILL
+    { "CMP", FM_ZPX},      // d5 CMP xx,X
+    { "DEC", FM_ZPX},      // d6 DEC xx,X
+    { "ILL", FM_ILL},      // d7 ILL
+    { "CLD", FM_IMPL},     // d8 CLD
+    { "CMP", FM_ABSY},     // d9 CMP xxxx,Y
+    { "ILL", FM_ILL},      // da ILL
+    { "ILL", FM_ILL},      // db ILL
+    { "ILL", FM_ILL},      // dc ILL
+    { "CMP", FM_ABSX},     // dd CMP xxxx,X
+    { "DEC", FM_ABSX},     // de DEC xxxx,X
+    { "ILL", FM_ILL},      // df ILL
+    { "CPX", FM_IMM},      // e0 CPX #xx
+    { "SBC", FM_IXIN},     // e1 SBC (xx,X)
+    { "ILL", FM_ILL},      // e2 ILL
+    { "ILL", FM_ILL},      // e3 ILL
+    { "CPX", FM_ZP},       // e4 CPX xx
+    { "SBC", FM_ZP},       // e5 SBC xx
+    { "INC", FM_ZP},       // e6 INC xx
+    { "ILL", FM_ILL},      // e7 ILL
+    { "INX", FM_IMPL},     // e8 INX
+    { "SBC", FM_IMM},      // e9 SBC #xx
+    { "ILL", FM_ILL},      // ea ILL
+    { "ILL", FM_ILL},      // eb ILL
+    { "CPX", FM_ABS},      // ec CPX xxxx
+    { "SBC", FM_ABS},      // ed SBC xxxx
+    { "INC", FM_ABS},      // ee INC xxxx
+    { "ILL", FM_ILL},      // ef ILL
+    { "BEQ", FM_REL},      // f0 BEQ xx
+    { "SBC", FM_INIX},     // f1 SBC (xx),Y
+    { "ILL", FM_ILL},      // f2 ILL
+    { "ILL", FM_ILL},      // f3 ILL
+    { "ILL", FM_ILL},      // f4 ILL
+    { "SBC", FM_ZPX},      // f5 SBC xx,X
+    { "INC", FM_ZPX},      // f6 INC xx,X
+    { "ILL", FM_ILL},      // f7 ILL
+    { "SED", FM_IMPL},     // f8 SED
+    { "SBC", FM_ABSY},     // f9 SBC xxxx,Y
+    { "ILL", FM_ILL},      // fa ILL
+    { "ILL", FM_ILL},      // fb ILL
+    { "ILL", FM_ILL},      // fc ILL
+    { "SBC", FM_ABSX},     // fd SBC xxxx,X
+    { "INC", FM_ABSX},     // fe INC xxxx,X
+    { "ILL", FM_ILL}       // ff ILL
+  };
+
+uint16_t form_illegal(uint8_t* mem, uint16_t pc, uint8_t byte)
+{
+  uint16_t rtn = 1;
+  printf("         ILL                 ; %02x\n", byte);
+  return rtn;
+}
+
+uint16_t form_a(uint8_t* mem, uint16_t pc, uint8_t byte)
+{
+  uint16_t rtn = 1;
+  printf("        %s A                  ; %02x\n",
+	 instructions[byte].name, byte);
+  return rtn;
+}
+
+uint16_t form_implied(uint8_t* mem, uint16_t pc, uint8_t byte)
+{
+  uint16_t rtn = 1;
+  printf("        %s                    ; %02x\n",
+	 instructions[byte].name, byte);
+  return rtn;
+}
+
+uint16_t form_immediate(uint8_t* mem, uint16_t pc, uint8_t byte)
+{
+  uint16_t rtn = 2;
+  printf("        %s   #0x%02x   ; %02x %02x \n",
+	 instructions[byte].name, byte, mem[pc+1]);
+  return rtn;
+}
+
+uint16_t form_zero_page(uint8_t* mem, uint16_t pc, uint8_t byte)
+{
+  uint16_t rtn = 2;
+  printf("        %s   0x%02x   ; %02x %02x \n",
+	 instructions[byte].name, byte, mem[pc+1]);
+  return rtn;
+}
+uint16_t form_zero_page_x(uint8_t* mem, uint16_t pc, uint8_t byte)
+{
+  uint16_t rtn = 2;
+  printf("       %s   0x02x   ; 502x %02x \n",
+	 instructions[byte].name, byte, mem[pc+1]);
+  return rtn;
+}
+
+uint16_t form_print(uint8_t* mem, uint16_t pc, uint8_t byte)
+{
+  uint16_t rtn = 0;
+  uint8_t b1 = mem[pc + 1];
+  uint8_t b2 = mem[pc + 2];
+  
+  form_t form = instructions[byte].form;
+  switch(form)
+    {
+    case FM_ILL:        // Illegal opcode
+      rtn = 1;
+      printf("--------ILL-------- ; 0x%02x\n", byte);
+      break;
+    case FM_A:          // op A
+      rtn = 1;
+      printf("        %s  A       ; 0x%02x\n", instructions[byte].name,
+	     byte);
+      break;
+    case FM_IMPL:       // op
+      rtn = 1;
+      printf("        %s          ; 0x%02x\n", instructions[byte].name,
+	     byte);
+      break;
+    case FM_IMM:        // op #xx
+      rtn = 2;
+      printf("        %s #0x%02x  ; 0x%02x\n", instructions[byte].name,
+	     b1, byte);
+      break;
+    case FM_ZP:         // op xx
+      rtn = 2;
+      printf("        %s 0x%02x  ; 0x%02x\n", instructions[byte].name,
+	     b1, byte);
+      break;
+    case FM_ZPX:        // op xx,X
+      rtn = 2;
+      printf("        %s 0x%02x,X ; 0x%02x\n", instructions[byte].name,
+	     b1, byte);
+      break;
+    case FM_ZPY:        // op xx,Y
+      rtn = 2;
+      printf("        %s 0x%02x,Y ; 0x%02x\n", instructions[byte].name,
+	     b1, byte);
+      break;
+    case FM_REL:        // op xx
+      rtn = 2;
+      printf("        %s 0x%04x  ; 0x%02x 0x%02x\n",
+	     instructions[byte].name, b1, byte, byte);
+      break;
+    case FM_ABS:        // op xxxx
+      rtn = 3;
+      printf("        %s 0x%04x  ; 0x%02x \n",
+	     instructions[byte].name, (uint16_t) b1 | (uint16_t) b2 << 8,
+	     byte);
+      break;
+    case FM_ABSX:       // op xxxx,X
+      rtn = 3;
+      printf("        %s 0x%04x,X  ; 0x%02x \n",
+	     instructions[byte].name, (uint16_t) b1 | (uint16_t) b2 << 8,
+             byte);
+      break;
+    case FM_ABSY:       // op xxxx.Y
+      rtn = 3;
+      printf("       %s 0x%04x,Y  ; 0x%02x \n",
+	     instructions[byte].name, (uint16_t) b1 | (uint16_t) b2 << 8,
+	     byte);
+      break;
+    case FM_IXIN:       // op (xx,x)
+      rtn = 2;
+      printf("      %s   (0x%02x,X)  ; 0x%02x \n",
+	     instructions[byte].name, b1, byte);
+      break;
+    case FM_INIX:       // op (xx),Y
+      rtn = 2;
+      printf("     %s  (0x%02x),Y  ; 0x%02x \n",
+	     instructions[byte].name, b1, byte);
+      break;
+    case FM_IND:        // op (xxxx)
+      rtn = 3;
+      printf("       %s (0x%04x)   ; 0x%02x \n",
+	     instructions[byte].name, (uint16_t) b1 | (uint16_t) b2 << 8);
+      break;
+    default:
+      rtn = 1;
+      printf("ERROR: undefined opcode.  %02x *********\n", b1);
+      break;
+    }
+
+  return rtn;
+}
+
+  
+
+
+uint8_t memory[65536];
+uint16_t pc;
+
+int main(int argc, char** argv)
+{
+  for(int i = 0; i < 256; i++)
+    {
+    printf("%03d %s form: %d\n", i,
+	   instructions[i].name, instructions[i].form);
+    printf("0x%04x:  ", pc);
+    pc += form_print(memory, pc, (uint8_t)i);
+    }
+  
+  return 0;
+}
+
+
+
+
+
+

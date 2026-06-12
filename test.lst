@@ -1,0 +1,35 @@
+ASxxxx Assembler V05.30  (Rockwell 6502/6510/65C02)                     Page 1
+Hexadecimal [16-Bits]                                 Thu Sep 25 20:51:37 2025
+
+
+
+                              1         .AREA prg (abs)
+   0200                       2         .org 0x0200
+   0200 85 10         [ 3]    3         sta  0x10
+   0202 AD 00 04      [ 4]    4         lda 0x400
+   0205 A2 FF         [ 2]    5         ldx #0xff
+   0207 9A            [ 2]    6         txs
+   0208 CA            [ 2]    7 L123:   dex
+   0209 95 80         [ 4]    8         sta  0x80,X
+   020B F0 FB         [ 4]    9         beq  L123
+                             10         
+ASxxxx Assembler V05.30  (Rockwell 6502/6510/65C02)                     Page 2
+Hexadecimal [16-Bits]                                 Thu Sep 25 20:51:37 2025
+
+Symbol Table
+
+    .__.$$$.       =   2710 L   |     .__.ABS.       =   0000 G
+    .__.CPU.       =   0000 L   |     .__.H$L.       =   0000 L
+  2 L123               0208 R
+
+ASxxxx Assembler V05.30  (Rockwell 6502/6510/65C02)                     Page 3
+Hexadecimal [16-Bits]                                 Thu Sep 25 20:51:37 2025
+
+Area Table
+
+[_CSEG]
+   0 _CODE            size    0   flags C080
+   2 prg              size  20D   flags  908
+[_DSEG]
+   1 _DATA            size    0   flags C0C0
+
